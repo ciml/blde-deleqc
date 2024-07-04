@@ -246,6 +246,8 @@ int getDimensao(int funcao, int nivel){
 			}
 		break;
 	}
+	cout << "Function " << funcao << " used in getDimension() not found. Returning 0." << endl;
+	return 0;
 }
 
 //Retorna se min (1) ou max (2)
@@ -481,6 +483,8 @@ int getTipo(int funcao, int nivel){
 			}
 		break;
 	}
+	cout << "Function " << funcao << " used in getTipo() not found. Returning 0." << endl;
+	return 0;
 }
 
 
@@ -2161,6 +2165,8 @@ double getUpper(int nivel, int funcao, int indice){
 	} else{
 		return 100;
 	}
+	cout << "Function " << funcao << " used in getUpper() not found. Returning 0." << endl;
+	return 0.0;
 }
 
 double getLower(int nivel, int funcao, int indice){
@@ -2298,4 +2304,6 @@ double getLower(int nivel, int funcao, int indice){
         } else {
                return 0;
         }
+		cout << "Function " << funcao << " used in getLower() not found. Returning 0." << endl;
+		return 0;
 }

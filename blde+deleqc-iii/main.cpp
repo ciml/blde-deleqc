@@ -15,6 +15,7 @@ double F, CR;     // parâmetros do DE
 int VARIANTE;     // variante do DE
 double TOLERANCE; // tolerancia para o criterio de parada
 double EPS;       // tolerancia da restricao
+int NUMBER_OF_CONSTRAINTS[] = {3, 3, 4, 3, 3}; // number of constraints for each function: 20-24 => those used in CILAMCE2024
 
 #include "funcoes.h"
 
