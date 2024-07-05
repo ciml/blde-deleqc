@@ -814,7 +814,7 @@ void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, i
             break;
         case 22:
             b[0] = 12.0-4.0*leader[0];
-            b[1] = 4.0+4.0* leader[0];
+            b[1] = -4.0+4.0* leader[0];
             b[2] = 4.0-4.0*leader[0];
             b[3] = 4.0+4.0*leader[0];
             break;
