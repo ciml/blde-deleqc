@@ -32,8 +32,9 @@ double **popLValoresF;
 double residuo;
 double epsilon = pow(10, -4);
 
-void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, int d, int nConstraints, double **Matrix_Z, double *base);
-void inicializa(double **&pop, double **&pop_p, int n, int d, int nivel = 2, int nConstraints = 3, bool createProjectedPopulation = false);
+void populateMatrixes(double **E, double **ETranspose, double **MatrixZ, int nConstraints, int dim);
+void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, int d, int nConstraints, double **Matrix_Z, double *base, double **Matrix_E, double **Matrix_E_Transpose);
+void inicializa(double **&pop, double **&pop_p, int n, int d, double **Matriz_E, double **Matriz_E_Transpose, double **Matriz_Z, int nivel = 2, int nConstraints = 3, bool createProjectedPopulation = false);
 
 //=============================================================================
 //=============================================================================
@@ -268,7 +269,7 @@ int iguais(double *ind1, double *ind2, int d)
 }
 
 // ===== Algoritmo do Seguidor =====
-void deFollower(double *uL, double *uF)
+void deFollower(double *uL, double *uF, double **Matriz_E, double **Matriz_E_Transposto, double **Matriz_Z)
 {
 
     // uL é a variável que vem do Lider (variável X);
@@ -284,14 +285,9 @@ void deFollower(double *uL, double *uF)
 
     //Matrixes used in the transformation of a candidate solution in the null space to the original space
     double *base = new double[DIMF];
-    double **Matriz_Z = new double*[DIMF];
-    for (int i = 0; i < DIMF; i++)
-    {
-        Matriz_Z[i] = new double[DIMF-nConstraints];
-    }
 
-    inicializaFollower(popF, popF_p, uL, SIZEF, DIMF, nConstraints, Matriz_Z, base);
-    inicializa(popFNova, popFNova_p, SIZEF, DIMF, 2, nConstraints, true); // createProjectedPopulation = true to create the population used in the search procedure
+    inicializaFollower(popF, popF_p, uL, SIZEF, DIMF, nConstraints, Matriz_Z, base, Matriz_E, Matriz_E_Transposto);
+    inicializa(popFNova, popFNova_p, SIZEF, DIMF, Matriz_E, Matriz_E_Transposto, Matriz_Z, 2, nConstraints, true); // createProjectedPopulation = true to create the population used in the search procedure
 
     // variancias e medias de cada variavel
     double *var_inicial = new double[DIMF];
@@ -444,18 +440,13 @@ void deFollower(double *uL, double *uF)
     delete [] popF_p;
     delete [] popFNova_p;
 
-    for (int i = 0; i < DIMF; i++)
-    {
-        delete [] Matriz_Z[i];
-    }
-    delete [] Matriz_Z;
     delete [] base;
     delete[] var_inicial;
     delete[] var_atual;
 
 }
 
-void deLeader()
+void deLeader(double **Matriz_E, double **Matriz_E_Transposto, double **Matriz_Z)
 {
 
     /////////////////////////////////////////////
@@ -514,7 +505,7 @@ void deLeader()
 
         //        cout << "  " << u[0] << "  " << u[1] << endl;
 
-        deFollower(u, uF);
+        deFollower(u, uF, Matriz_E, Matriz_E_Transposto, Matriz_Z);
 
         // se a solução do líder atual (u) for igual a anterior (popL) e
         // a solução do seguidor atual (uF) for diferente da anteior (popLValoresF).
@@ -785,7 +776,7 @@ void Calcula_Residuo(int n, double *id, double **populacao, int restigual, int d
 }
 
 // Inicializa a população do Seguidor
-void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, int dim, int nConstraints, double **Matriz_Z, double *base)
+void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, int dim, int nConstraints, double **Matriz_Z, double *base, double **Matriz_E, double ** Matriz_E_Transposto)
 {
 
     pop = new double *[n];
@@ -1116,61 +1107,10 @@ void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, i
 
     */
 
-    // Define file to read
-    FILE *arq;
-    switch (FUNCAO)
-    {
-    case 20:
-        arq = fopen("matriz_p1_.txt", "r");
-
-        break;
-    case 21:
-        arq = fopen("matriz_p2_.txt", "r");
-        break;
-    case 22:
-        arq = fopen("matriz_p3_.txt", "r");
-        break;
-    case 23:
-        arq = fopen("matriz_p4_.txt", "r");
-        break;
-    case 24:
-        arq = fopen("matriz_p5_.txt", "r");
-        break;
-    default:
-        cout << "The problem " << FUNCAO << " is not available in the input files." << endl;
-    }
-    if (arq == NULL)
-    {
-        cout << "Fail in opening the input file.\n"
-             << endl;
-    }
+    
 
     int i, j, k; // auxileares
-    // Allocate and Read the matrix EOr, ZOr, and the vector bOr from input file
     double *b = new double[nConstraints];
-    double **Matriz_E = new double *[nConstraints];
-    for (i = 0; i < nConstraints; i++)
-    {
-        Matriz_E[i] = new double[dim];
-    }
-    double **Matriz_E_Transposto = new double*[dim];
-    for(i=0; i<dim; i++) {
-        Matriz_E_Transposto[i] = new double[nConstraints];
-    }
-
-    for (i = 0; i < nConstraints; i++)
-    {
-        for (j = 0; j < dim; j++)
-        {
-            fscanf(arq, "%lf", &Matriz_E[i][j]);
-            Matriz_E_Transposto[j][i] = Matriz_E[i][j];
-        }
-    }
-
-    /*for (i = 0; i < nConstraints; i++)
-    {
-        fscanf(arq, "%lf", &b[i]);             /////////////////// changed
-    }*/
     switch (FUNCAO)
     {
         case 20: case 23: case 24:
@@ -1196,15 +1136,9 @@ void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, i
     }
 
 
-    for (i = 0; i < dim; i++)
-    {
-        for (j = 0; j < (dim - nConstraints); j++)
-        {
-            fscanf(arq, "%lf", &Matriz_Z[i][j]);
-        }
-    }
 
-    fclose(arq); // Close the file
+
+
 
     // generate the null space of the matrix E
     double **Matriz_M = new double*[nConstraints];    
@@ -1266,16 +1200,9 @@ void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, i
     }
 
     // Free the memory
-    for (i = 0; i < nConstraints; i++)
-    {
-        delete [] Matriz_E[i];
-    }
-    delete [] Matriz_E;
+    
     delete [] b;
-    for(i=0; i<dim; i++){
-        delete [] Matriz_E_Transposto[i];
-    }
-    delete [] Matriz_E_Transposto;
+    
     for(i=0; i<nConstraints; i++){
         delete [] Matriz_M[i];
     }
@@ -1285,7 +1212,7 @@ void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, i
     
 }
 
-void inicializa(double **&pop, double **&pop_p, int n, int d, int nivel, int nConstraints, bool createProjectedPopulation)
+void inicializa(double **&pop, double **&pop_p, int n, int d, double **Matriz_E, double **Matriz_E_Transpose, double **Matriz_Z, int nivel, int nConstraints, bool createProjectedPopulation)
 {
 
     pop = new double *[n];
@@ -1306,7 +1233,7 @@ void inicializa(double **&pop, double **&pop_p, int n, int d, int nivel, int nCo
         if (nivel == 1)
         { // se lider, determina valores do seguidor
 
-            deFollower(pop[i], popLValoresF[i]);
+            deFollower(pop[i], popLValoresF[i], Matriz_E, Matriz_E_Transpose, Matriz_Z);
 
             calculaAptidao(pop[i], DIML, 1, pop[i], popLValoresF[i]);
 
@@ -1336,14 +1263,14 @@ void inicializa(double **&pop, double **&pop_p, int n, int d, int nivel, int nCo
 
 }
 
-void BlDE()
+void BlDE(double **Matrix_E, double **Matrix_E_Transpose, double **Matriz_Z)
 {
     imprimeCabecalho();
 
     for (int g = 0; g < GENL; g++)
     {
 
-        deLeader();
+        deLeader( Matrix_E, Matrix_E_Transpose, Matriz_Z);
 
         double *uL = new double[DIML + 3];
         int m = selecionaMelhor(uL, popL, SIZEL, DIML, 2);
@@ -1360,6 +1287,67 @@ void BlDE()
         cout << "Fit: " << popLValoresF[m][DIMF] << " Const: " << popLValoresF[m][DIMF + 1] << " " << popLValoresF[m][DIMF + 2] << " " << getNEval(1) << " " << getNEval(2) << endl;
         delete[] uL;
     }
+}
+
+void populateMatrixes(double **E, double **ETranspose, double **MatrixZ, int nConstraints, int dim) {
+    // Define file to read
+    FILE *arq;
+    switch (FUNCAO)
+    {
+    case 20:
+        arq = fopen("matriz_p1_.txt", "r");
+
+        break;
+    case 21:
+        arq = fopen("matriz_p2_.txt", "r");
+        break;
+    case 22:
+        arq = fopen("matriz_p3_.txt", "r");
+        break;
+    case 23:
+        arq = fopen("matriz_p4_.txt", "r");
+        break;
+    case 24:
+        arq = fopen("matriz_p5_.txt", "r");
+        break;
+    default:
+        cout << "The problem " << FUNCAO << " is not available in the input files." << endl;
+    }
+    if (arq == NULL)
+    {
+        cout << "Fail in opening the input file.\n"
+             << endl;
+    }
+
+    int i, j, k; // auxileares
+
+    
+    
+
+    for (i = 0; i < nConstraints; i++)
+    {
+        for (j = 0; j < dim; j++)
+        {
+            fscanf(arq, "%lf", &E[i][j]);
+            ETranspose[j][i] = E[i][j];
+        }
+    }
+
+    /*for (i = 0; i < nConstraints; i++)
+    {
+        fscanf(arq, "%lf", &b[i]);             /////////////////// changed
+    }*/
+
+
+    for (i = 0; i < dim; i++)
+    {
+        for (j = 0; j < (dim - nConstraints); j++)
+        {
+            fscanf(arq, "%lf", &MatrixZ[i][j]);
+        }
+    }
+
+    fclose(arq); // Close the file
 }
 
 int main(int argc, char *argv[])
@@ -1431,11 +1419,29 @@ int main(int argc, char *argv[])
     int nConstraints = getNumberOfConstraints(FUNCAO, 2);
     double **popAux;
 
-    inicializa(popLValoresF, popAux, SIZEL, DIMF, 2, nConstraints, false);
-    inicializa(popL, popAux, SIZEL, DIML, 1, nConstraints, false);
-    inicializa(popLNova, popAux, SIZEL, DIML, 2, nConstraints, false);
+    // Allocate memory of the matrixes used to handle the linear constraints
+    double **Matriz_E = new double *[nConstraints];
+    for (int i = 0; i < nConstraints; i++)
+    {
+        Matriz_E[i] = new double[DIMF];
+    }
+    double **Matriz_E_Transposto = new double*[DIMF];
+    for(int i=0; i<DIMF; i++) {
+        Matriz_E_Transposto[i] = new double[nConstraints];
+    }
+    double **Matriz_Z = new double*[DIMF];
+    for (int i = 0; i < DIMF; i++)
+    {
+        Matriz_Z[i] = new double[DIMF-nConstraints];
+    }
+    // concluding the allocations
 
-    BlDE();
+    populateMatrixes(Matriz_E, Matriz_E_Transposto, Matriz_Z, nConstraints, DIMF);
+    inicializa(popLValoresF, popAux, SIZEL, DIMF, Matriz_E, Matriz_E_Transposto,Matriz_Z, 2, nConstraints, false);
+    inicializa(popL, popAux, SIZEL, DIML, Matriz_E, Matriz_E_Transposto,Matriz_Z, 1, nConstraints, false);
+    inicializa(popLNova, popAux, SIZEL, DIML, Matriz_E, Matriz_E_Transposto,Matriz_Z, 2, nConstraints, false);
+
+    BlDE( Matriz_E, Matriz_E_Transposto, Matriz_Z);
 
     // desalocate memory
     for (int i = 0; i < SIZEL; i++)
@@ -1447,5 +1453,21 @@ int main(int argc, char *argv[])
     delete[] popL;
     delete[] popLNova;
     delete[] popLValoresF;
+
+    // desalocate memory of the matrixes used to handle the linear constraints
+    for (int i = 0; i < nConstraints; i++)
+    {
+        delete [] Matriz_E[i];
+    }
+    delete [] Matriz_E;
+    for(int i=0; i<DIMF; i++){
+        delete [] Matriz_E_Transposto[i];
+    }
+    delete [] Matriz_E_Transposto;
+    for (int i = 0; i < DIMF; i++)
+    {
+        delete [] Matriz_Z[i];
+    }
+    delete [] Matriz_Z;
 
 }
