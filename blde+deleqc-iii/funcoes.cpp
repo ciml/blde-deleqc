@@ -2307,3 +2307,16 @@ double getLower(int nivel, int funcao, int indice){
 		cout << "Function " << funcao << " used in getLower() not found. Returning 0." << endl;
 		return 0;
 }
+
+int getNumberOfConstraints(int funcao, int nivel) {
+	switch (funcao)
+	{
+	case 20: case 21: case 23: case 24:
+		return 3;
+	case 22:
+		return 4;
+	}
+	cout << "Function " << funcao << " used in getNumberOfConstraints() not found. Returning 0." << endl;
+	return 0;
+}
+

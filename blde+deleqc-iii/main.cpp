@@ -1,3 +1,8 @@
+
+// To compile
+// g++ main.cpp funcoes.cpp LU.c -o cilamce2024
+
+
 #include "stdio.h"
 #include "string.h"
 #include "stdlib.h"
@@ -6,18 +11,19 @@ using namespace std;
 
 #define PENALTY 1
 
-int SIZEL, SIZEF; // tamanho da população (L = leader; F = follower)
-int GENL, GENF;   // número de gerações
-int SEED;         // semente
-int FUNCAO;       // função teste
-int DIML, DIMF;   // dimensão do problema (variáveis X-Lider e Y-Seguidor)
-double F, CR;     // parâmetros do DE
-int VARIANTE;     // variante do DE
-double TOLERANCE; // tolerancia para o criterio de parada
-double EPS;       // tolerancia da restricao
-int NUMBER_OF_CONSTRAINTS[] = {3, 3, 4, 3, 3}; // number of constraints for each function: 20-24 => those used in CILAMCE2024
+int SIZEL, SIZEF;          // tamanho da população (L = leader; F = follower)
+int GENL, GENF;            // número de gerações
+int SEED;                  // semente
+int FUNCAO;                // função teste
+int DIML, DIMF;            // dimensão do problema (variáveis X-Lider e Y-Seguidor)
+double F, CR;              // parâmetros do DE
+int VARIANTE;              // variante do DE
+double TOLERANCE;          // tolerancia para o criterio de parada
+double EPS;                // tolerancia da restricao
+int NUMBER_OF_CONSTRAINTS; // number of constraints for each function | CILAMCE2024
 
 #include "funcoes.h"
+#include "LU.h"
 
 double **popL;
 double **popLNova;
@@ -26,8 +32,8 @@ double **popLValoresF;
 double residuo;
 double epsilon = pow(10, -4);
 
-void inicializaFollower(double **&pop, double *leader, int n, int d);
-void inicializa(double **&pop, int n, int d, int nivel = 2);
+void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, int d, int nConstraints, double **Matrix_Z, double *base);
+void inicializa(double **&pop, double **&pop_p, int n, int d, int nivel = 2, int nConstraints = 3, bool createProjectedPopulation = false);
 
 //=============================================================================
 //=============================================================================
@@ -268,21 +274,40 @@ void deFollower(double *uL, double *uF)
     // uL é a variável que vem do Lider (variável X);
     // Neste código vamos obter o Y associado ao X que veio do Líder.
 
-    double **popF;
-    double **popFNova;
-    inicializaFollower(popF, uL, SIZEF, DIMF);
-    inicializa(popFNova, SIZEF, DIMF, 2);
+    double **popF;     // n dimensional individuals
+    double **popFNova; // n dimensional individuals generated at each iteration of the search procedure
+
+    double **popF_p;     // n-p dimensional individuals (projected individuals in the null space)
+    double **popFNova_p; // n-p dimensional individuals generated at each iteration of the search procedure (projected individuals in the null space)
+
+    int nConstraints = getNumberOfConstraints(FUNCAO, 2);
+
+    //Matrixes used in the transformation of a candidate solution in the null space to the original space
+    double *base = new double[DIMF];
+    double **Matriz_Z = new double*[DIMF];
+    for (int i = 0; i < DIMF; i++)
+    {
+        Matriz_Z[i] = new double[DIMF-nConstraints];
+    }
+
+    inicializaFollower(popF, popF_p, uL, SIZEF, DIMF, nConstraints, Matriz_Z, base);
+    inicializa(popFNova, popFNova_p, SIZEF, DIMF, 2, nConstraints, true); // createProjectedPopulation = true to create the population used in the search procedure
 
     // variancias e medias de cada variavel
     double *var_inicial = new double[DIMF];
     double *var_atual = new double[DIMF];
 
     calculaVariancia(popF, var_inicial, DIMF, SIZEF);
+    double *uF_p = new double[DIMF - nConstraints];
 
     for (int gF = 0; gF < GENF; gF++)
     {
 
-        selecionaMelhor(uF, popF, SIZEF, DIMF, 2);
+        int best = selecionaMelhor(uF, popF, SIZEF, DIMF, 2);
+        
+        for(int i=0; i<DIMF-nConstraints; i++){
+            uF_p[i] = popF_p[best][i];
+        }
         // uF = melhor da populacao do seguidor; utilizado somente na
         // variante DE/best/1/bin
 
@@ -292,36 +317,51 @@ void deFollower(double *uL, double *uF)
             int ind1, ind2, ind3;
             selecionaIndividuos(ind1, ind2, ind3, i, SIZEL);
 
-            double *u = new double[DIMF + 3];
-            //            int jRand = rand()%DIMF;
-            for (int j = 0; j < DIMF; j++)
+            double *u = new double[DIMF + 3]; // old code; now, the search is within the reduced space
+            double *u_p = new double[DIMF - nConstraints];
+            int jRand = rand()%DIMF;
+            for (int j = 0; j < DIMF-nConstraints; j++)
             {
-                //                if (j == jRand || rand()/(float)RAND_MAX < CR){
+                if (j == jRand || rand()/(float)RAND_MAX < CR){
 
-                if (VARIANTE == 1)
-                {
-                    // DE/rand/1/bin
-                    u[j] = popF[ind1][j] + F * (popF[ind2][j] - popF[ind3][j]);
-                }
-                else if (VARIANTE == 2)
-                {
-                    // DE/best/1/bin
-                    u[j] = uF[j] + F * (popF[ind2][j] - popF[ind3][j]);
-                }
-                else if (VARIANTE == 3)
-                {
-                    // DE/target-to-rand/1/bin
-                    u[j] = popF[i][j] + F * (popF[ind1][j] - popF[i][j]) + F * (popF[ind2][j] - popF[ind3][j]);
-                }
-                else if (VARIANTE == 4)
-                {
-                    // DE/target-to-best/1/bin
-                    u[j] = popF[i][j] + F * (uF[j] - popF[i][j]) + F * (popF[ind2][j] - popF[ind3][j]);
-                }
+                    if (VARIANTE == 1)
+                    {
+                        // DE/rand/1/bin
+                        u_p[j] = popF_p[ind1][j] + F * (popF_p[ind2][j] - popF_p[ind3][j]);
+                    }
+                    else if (VARIANTE == 2)
+                    {
+                        // DE/best/1/bin
+                        u_p[j] = uF_p[j] + F * (popF_p[ind2][j] - popF_p[ind3][j]);
+                    }
+                    else if (VARIANTE == 3)
+                    {
+                        // DE/target-to-rand/1/bin
+                        u_p[j] = popF_p[i][j] + F * (popF_p[ind1][j] - popF_p[i][j]) + F * (popF_p[ind2][j] - popF_p[ind3][j]);
+                    }
+                    else if (VARIANTE == 4)
+                    {
+                        // DE/target-to-best/1/bin
+                        u_p[j] = popF_p[i][j] + F * (uF_p[j] - popF_p[i][j]) + F * (popF_p[ind2][j] - popF_p[ind3][j]);
+                    }
 
-                //cout << " " << u[j];
+                    // cout << " " << u[j];
+                } else {
+                    u_p[j] = popF_p[i][j];
+                }
             }
-            //cout << endl;
+            // cout << endl;
+          
+            for ( int l = 0; l < DIMF; l++){
+                double Zp = 0;
+                for (int j = 0 ; j < (DIMF-nConstraints) ; j++){
+                    Zp += Matriz_Z[l][j] * u_p[j];
+                }
+                //printf(" [%f] ",solucao_x_til[l]);
+                u[l] = base[l] + Zp;   
+                //printf(" %f ", novo_id[l]);
+                //cout << u[l] << endl;
+            }
 
             calculaAptidao(u, DIMF, 2, uL, u);
 
@@ -331,6 +371,10 @@ void deFollower(double *uL, double *uF)
                 {
                     popFNova[i][j] = u[j];
                 }
+                for (int j = 0; j < DIMF - nConstraints; j++)
+                {
+                    popFNova_p[i][j] = u_p[j];
+                }
             }
             else
             {
@@ -338,8 +382,13 @@ void deFollower(double *uL, double *uF)
                 {
                     popFNova[i][j] = popF[i][j];
                 }
+                for (int j = 0; j < DIMF - nConstraints; j++)
+                {
+                    popFNova_p[i][j] = popF_p[i][j];
+                }
             }
             delete[] u;
+            delete[] u_p;
         }
 
         // copia a populacao nova
@@ -348,6 +397,10 @@ void deFollower(double *uL, double *uF)
             for (int j = 0; j < DIMF + 3; j++)
             {
                 popF[i][j] = popFNova[i][j];
+            }
+            for (int j = 0; j < DIMF - nConstraints; j++)
+            {
+                popF_p[i][j] = popFNova_p[i][j];
             }
         }
 
@@ -366,6 +419,8 @@ void deFollower(double *uL, double *uF)
         //---------------------------------------------
     }
 
+
+    delete [] uF_p;
     selecionaMelhor(uF, popF, SIZEF, DIMF, 2);
 
     //    cout << endl << " BEST: " ;
@@ -379,9 +434,25 @@ void deFollower(double *uL, double *uF)
     {
         delete[] popF[i];
         delete[] popFNova[i];
+
+        delete [] popF_p[i];
+        delete [] popFNova_p[i];
     }
     delete[] popF;
     delete[] popFNova;
+
+    delete [] popF_p;
+    delete [] popFNova_p;
+
+    for (int i = 0; i < DIMF; i++)
+    {
+        delete [] Matriz_Z[i];
+    }
+    delete [] Matriz_Z;
+    delete [] base;
+    delete[] var_inicial;
+    delete[] var_atual;
+
 }
 
 void deLeader()
@@ -714,7 +785,7 @@ void Calcula_Residuo(int n, double *id, double **populacao, int restigual, int d
 }
 
 // Inicializa a população do Seguidor
-void inicializaFollower(double **&pop, double *leader, int n, int dim)
+void inicializaFollower(double **&pop, double **&pop_p, double *leader, int n, int dim, int nConstraints, double **Matriz_Z, double *base)
 {
 
     pop = new double *[n];
@@ -723,9 +794,16 @@ void inicializaFollower(double **&pop, double *leader, int n, int dim)
         pop[i] = new double[dim + 3];
     }
 
+    pop_p = new double *[n];
+    for (int i = 0; i < n; i++)
+    {
+        pop_p[i] = new double[dim - nConstraints];
+    }
+
     //    cout << " " << leader[0] << " " << leader[1] << endl;
 
-    int restigual = 4;
+    /* OLD CODE? */
+    /*int restigual = 4;
     double *c, *vetor_correto;
     double *u, *y, *z;
     double **E, **Et, **M, **Residuo;
@@ -1035,9 +1113,179 @@ void inicializaFollower(double **&pop, double *leader, int n, int dim)
     free(M);
     free(c);
     free(vetor_correto);
+
+    */
+
+    // Define file to read
+    FILE *arq;
+    switch (FUNCAO)
+    {
+    case 20:
+        arq = fopen("matriz_p1_.txt", "r");
+
+        break;
+    case 21:
+        arq = fopen("matriz_p2_.txt", "r");
+        break;
+    case 22:
+        arq = fopen("matriz_p3_.txt", "r");
+        break;
+    case 23:
+        arq = fopen("matriz_p4_.txt", "r");
+        break;
+    case 24:
+        arq = fopen("matriz_p5_.txt", "r");
+        break;
+    default:
+        cout << "The problem " << FUNCAO << " is not available in the input files." << endl;
+    }
+    if (arq == NULL)
+    {
+        cout << "Fail in opening the input file.\n"
+             << endl;
+    }
+
+    int i, j, k; // auxileares
+    // Allocate and Read the matrix EOr, ZOr, and the vector bOr from input file
+    double *b = new double[nConstraints];
+    double **Matriz_E = new double *[nConstraints];
+    for (i = 0; i < nConstraints; i++)
+    {
+        Matriz_E[i] = new double[dim];
+    }
+    double **Matriz_E_Transposto = new double*[dim];
+    for(i=0; i<dim; i++) {
+        Matriz_E_Transposto[i] = new double[nConstraints];
+    }
+
+    for (i = 0; i < nConstraints; i++)
+    {
+        for (j = 0; j < dim; j++)
+        {
+            fscanf(arq, "%lf", &Matriz_E[i][j]);
+            Matriz_E_Transposto[j][i] = Matriz_E[i][j];
+        }
+    }
+
+    /*for (i = 0; i < nConstraints; i++)
+    {
+        fscanf(arq, "%lf", &b[i]);             /////////////////// changed
+    }*/
+    switch (FUNCAO)
+    {
+        case 20: case 23: case 24:
+            b[0] = 1.0;
+            b[1] = 1.0 - 2.0 * leader[0];
+            b[2] = 1.0 - 2.0 * leader[1];
+            break;
+        case 21:
+            b[0] = -2.5+2.0 * leader[0];
+            b[1] = 2.0-leader[0]+3.0*leader[1];
+            b[2] = 2.0-leader[0]-leader[1];
+            break;
+        case 22:
+            b[0] = 12.0-4.0*leader[0];
+            b[1] = 4.0+4.0* leader[0];
+            b[2] = 4.0-4.0*leader[0];
+            b[3] = 4.0+4.0*leader[0];
+            break;
+    
+        default:
+            cout << "The problem " << FUNCAO << " has no definition in vector b for initialization of the population." << endl;
+            break;
+    }
+
+
+    for (i = 0; i < dim; i++)
+    {
+        for (j = 0; j < (dim - nConstraints); j++)
+        {
+            fscanf(arq, "%lf", &Matriz_Z[i][j]);
+        }
+    }
+
+    fclose(arq); // Close the file
+
+    // generate the null space of the matrix E
+    double **Matriz_M = new double*[nConstraints];    
+    for(i=0; i<nConstraints; i++){
+        Matriz_M[i] = new double[nConstraints];
+    }
+    for(i = 0; i < nConstraints; i++){
+        for(j = 0; j < nConstraints; j++){
+            Matriz_M[i][j] = 0.0;
+            for(k = 0; k < dim; k++){
+                Matriz_M[i][j] =  Matriz_M[i][j] + Matriz_E[i][k]*Matriz_E_Transposto[k][j];
+            }
+        }
+    }
+
+    int *p = new int[nConstraints];
+    for(i=0; i<nConstraints; i++){
+        p[i] = i;
+    }
+    
+    lu(Matriz_M,&p[0],nConstraints); //Encontra as matrizes 'L' e 'U'
+    double *resFx = lu_solve(Matriz_M,p,b,nConstraints); //Encontra o resultado do sistema Mx=b
+
+    for(j = 0; j < dim; j++){
+        base[j] = 0;
+        for(k = 0; k < nConstraints; k++){
+            base[j] = base[j]+ Matriz_E_Transposto[j][k]*resFx[k];
+        }
+    }
+
+    // Inicializa a população do Seguidor
+    for (i = 0; i < n; i++)
+    {
+        // generate random solution in the projected space
+        for (j = 0; j < dim - nConstraints; j++)
+        {
+            pop_p[i][j] = getLower(2, FUNCAO, j) + (rand() % 1000000 / 1000000.f) * (getUpper(2, FUNCAO, j) - getLower(2, FUNCAO, j));
+        }
+
+    }
+
+    // generate the solution in the original space
+    for (k = 0; k < n; k++)
+    {
+
+        for (i = 0; i < dim; i++)
+        {
+            double Zp = 0;
+            for (j = 0; j < dim - nConstraints; j++)
+            {
+                Zp += Matriz_Z[i][j] * pop_p[k][j];
+            }
+
+            pop[k][i] = base[i] + Zp;
+        }
+
+        // calculate the objective function values and constraints
+        calculaAptidao(pop[k], dim, 2, leader, pop[k]);
+    }
+
+    // Free the memory
+    for (i = 0; i < nConstraints; i++)
+    {
+        delete [] Matriz_E[i];
+    }
+    delete [] Matriz_E;
+    delete [] b;
+    for(i=0; i<dim; i++){
+        delete [] Matriz_E_Transposto[i];
+    }
+    delete [] Matriz_E_Transposto;
+    for(i=0; i<nConstraints; i++){
+        delete [] Matriz_M[i];
+    }
+    delete [] Matriz_M;
+    delete [] p;
+    free(resFx);
+    
 }
 
-void inicializa(double **&pop, int n, int d, int nivel)
+void inicializa(double **&pop, double **&pop_p, int n, int d, int nivel, int nConstraints, bool createProjectedPopulation)
 {
 
     pop = new double *[n];
@@ -1076,6 +1324,16 @@ void inicializa(double **&pop, int n, int d, int nivel)
             calculaAptidao(pop[i], d, 2, NULL, NULL);
         }
     }
+
+    // IF level 2 (follower), then initialize the follower population in the projected space
+    if (nivel == 2 && createProjectedPopulation) {
+        pop_p = new double *[n];
+        for (int i = 0; i < n; i++)
+        {
+            pop_p[i] = new double[n-nConstraints];
+        }
+    }
+
 }
 
 void BlDE()
@@ -1170,9 +1428,24 @@ int main(int argc, char *argv[])
     DIML = getDimensao(FUNCAO, 1);
     DIMF = getDimensao(FUNCAO, 2);
 
-    inicializa(popLValoresF, SIZEL, DIMF, 2);
-    inicializa(popL, SIZEL, DIML, 1);
-    inicializa(popLNova, SIZEL, DIML, 2);
+    int nConstraints = getNumberOfConstraints(FUNCAO, 2);
+    double **popAux;
+
+    inicializa(popLValoresF, popAux, SIZEL, DIMF, 2, nConstraints, false);
+    inicializa(popL, popAux, SIZEL, DIML, 1, nConstraints, false);
+    inicializa(popLNova, popAux, SIZEL, DIML, 2, nConstraints, false);
 
     BlDE();
+
+    // desalocate memory
+    for (int i = 0; i < SIZEL; i++)
+    {
+        delete[] popL[i];
+        delete[] popLNova[i];
+        delete[] popLValoresF[i];
+    }
+    delete[] popL;
+    delete[] popLNova;
+    delete[] popLValoresF;
+
 }
