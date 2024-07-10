@@ -6,10 +6,10 @@ file_path = "/home/hedersb/workspace/blde-deleqc/blde+deleqc-iii/results/"
 
 # static parameters
 cr=0.9
-#tol=0.0001
-#eps=0.0001
-tol=0
-eps=0
+tol=0.0001
+eps=0.0001
+#tol=0
+#eps=0
 
 varL=3
 popL=30
