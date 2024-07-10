@@ -4,6 +4,9 @@ from statistics import median
 # Specify the path to the bz2 file
 file_path = "/home/hedersb/workspace/blde-deleqc/blde+deleqc-iii/results/"
 
+# multipler to transform the objective function to minimization
+multipliers = (-1.0, -1.0, 1.0, 1.0, 1.0)
+
 # static parameters
 tol=0.0001
 eps=0.0001
@@ -21,7 +24,7 @@ for f in (0.6, 0.7, 0.8, 0.9, 1):
 
         for varL in (1, 2, 3, 4):
 
-            for fobj in range(20, 24+1):
+            for fobj, multiplier in zip(range(20, 24+1), multipliers):
                 
                 for genF in (50, 100, 200, 500):
 
@@ -51,7 +54,7 @@ for f in (0.6, 0.7, 0.8, 0.9, 1):
                                     #print(lineElements[i])
                                     #print(i)
                                     if (constraintViolation < 0.0001):
-                                        results.append(result)
+                                        results.append(multiplier*result)
 
                     #print(f"&   {fobj}  & {genF} & {sum(results)/len(results):.2f}  & {median(results):.2f} & {round(sum(objectiveFunctionEvaluations)/len(objectiveFunctionEvaluations))} & {round(median(objectiveFunctionEvaluations))} & {len(results)} \\\\")
                     # write file
