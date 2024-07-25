@@ -5,13 +5,13 @@ from statistics import median
 file_path = "/home/hedersb/workspace/blde-deleqc/blde+deleqc-iii/results/"
 
 # static parameters
-cr=0.9
+cr=0.7
 tol=0.0001
 eps=0.0001
 #tol=0
 #eps=0
 
-varL=3
+varL=4
 popL=30
 popF=30
 f=0.7
